@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EventIQ — Smart Event Manager for Students</title>
+<style>
+  :root{ --blue1:#42a5f5; --blue2:#1e88e5; --dark:#0d47a1; }
+  body{
+    margin:0; font-family:Poppins,system-ui,Arial; background:linear-gradient(135deg,#e3f2fd,#bbdefb);
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card { background:#fff; border-radius:16px; box-shadow:0 10px 30px rgba(16,24,40,0.08);
+    width:100%; max-width:980px; overflow:hidden; }
+  .auth-wrapper{ padding:34px; max-width:420px; margin:auto; text-align:center; }
+  h1{ margin:0 0 6px; color:var(--dark); }
+  h2{ margin:0 0 18px; color:var(--blue2); }
+  input, select, textarea, button { width:100%; padding:10px 12px; margin:8px 0; border-radius:10px; border:1px solid #dfe7f3; font-size:15px; box-sizing:border-box;}
+  button{ background:linear-gradient(90deg,var(--blue1),var(--blue2)); color:#fff; border:none; cursor:pointer; font-weight:600; }
+  .small{ font-size:13px; color:#344968; }
+  .muted{ color:#607d8b; font-size:13px; }
+  .toggle{ color:var(--dark); cursor:pointer; font-weight:600; }
+  .app { display:grid; grid-template-columns: 320px 1fr; gap:20px; padding:24px; }
+  .left-panel{ padding:18px; border-right:1px solid #eef6ff; min-height:420px; }
+  .right-panel{ padding:18px; }
+  .section-title{ font-size:18px; color:var(--dark); margin:6px 0 12px; }
+  .list{ display:grid; gap:12px; margin-top:12px; }
+  .list .item{ background:#eaf4ff; padding:12px; border-radius:10px; display:flex; justify-content:space-between; align-items:center; }
+  .logout{ background:#ef5350; margin-top:12px; }
+  .app-header{ display:flex; justify-content:space-between; align-items:center; padding:16px 18px; background:linear-gradient(90deg,var(--blue2),var(--blue1)); color:#fff; }
+  .app-header h3{ margin:0; font-size:18px; }
+  .badge{ display:inline-block; background:rgba(255,255,255,0.12); padding:6px 10px; border-radius:999px; font-weight:600; }
+  .apps-list .item { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .apps-list .meta{ color:#09315f; font-weight:600; }
+  .row-buttons button{ margin-left:6px; background:#607d8b; font-size:12px; padding:6px 8px; border-radius:8px; color:#fff; border:none; cursor:pointer;}
+  .row-buttons button.delete{ background:#ef5350; }
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .chip{ background:rgba(14,78,146,0.08); color:#064a8a; padding:6px 8px; border-radius:999px; font-size:12px; }
+  .notif-unread{ border-left:4px solid #1e88e5; }
+  .small-link{ font-size:13px; color:#0d47a1; cursor:pointer; }
+  @media(max-width:880px){ .app{ grid-template-columns:1fr; } .left-panel{ border-right:none; } .auth-wrapper{ max-width:100%; } }
+</style>
+</head>
+<body>
+<div class="card" id="root">
+  <!-- AUTH SCREEN -->
+  <div id="authScreen" class="auth-wrapper">
+    <h1>EventIQ</h1>
+    <h2 id="modeTitle">Login</h2>
+
+    <!-- Registration additions: Name, Year, Branch, Contact, Interests -->
+    <input id="inpName" placeholder="Full name (for registration)" style="display:none" autocomplete="name" />
+    <input id="inpUsername" placeholder="Username (email or id)" autocomplete="off" />
+    <input id="inpPassword" placeholder="Password" type="password" />
+    <select id="inpRole">
+      <option value="student">Student</option>
+      <option value="admin">Admin</option>
+    </select>
+
+    <div id="extraStudentFields" style="display:none">
+      <input id="inpYear" placeholder="Year (e.g. 2nd)" />
+      <input id="inpBranch" placeholder="Branch (e.g. CSE)" />
+      <input id="inpContact" placeholder="Contact number" />
+      <input id="inpInterests" placeholder="Your interests (comma-separated), e.g. coding,ai,sports" />
+    </div>
+
+    <button id="btnAuth">Login</button>
+    <p class="small muted" id="authMessage"></p>
+    <p class="small">Not registered? <span id="toggleAuth" class="toggle">Register</span></p>
+    <p style="margin-top:8px"><span id="demoNote" class="muted small">Tip: Register student with interests, then add tagged events from admin to see notifications.</span></p>
+  </div>
+
+  <!-- APP / DASHBOARD -->
+  <div id="appScreen" style="display:none;">
+    <div class="app-header">
+      <h3 id="hdrTitle">Dashboard</h3>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span id="currentUserBadge" class="badge">Guest</span>
+        <button id="btnLogout" class="logout">Logout</button>
+      </div>
+    </div>
+
+    <div class="app">
+      <div class="left-panel" id="leftPanel"></div>
+
+      <div class="right-panel" id="rightPanel">
+        <div>
+          <div class="section-title">Events</div>
+          <div id="eventsList" class="list"></div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <div class="section-title">Companies</div>
+          <div id="companiesList" class="list"></div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <div class="section-title">Applications (Admin view)</div>
+          <div id="applicationsList" class="list apps-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (compat for straightforward integration) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<script>
+/* ======= KEYS ======= */
+const KEY_USERS='smartu_users';
+const KEY_EVENTS='smartu_events';
+const KEY_COMPANIES='smartu_companies';
+const KEY_APPS='smartu_applications';
+const KEY_NOTIF='smartu_notifications';
+const KEY_CURRENT='smartu_current';
+
+/* ======= DOM ======= */
+const authScreen=document.getElementById('authScreen');
+const appScreen=document.getElementById('appScreen');
+const btnAuth=document.getElementById('btnAuth');
+const toggleAuth=document.getElementById('toggleAuth');
+const modeTitle=document.getElementById('modeTitle');
+const inpName=document.getElementById('inpName');
+const inpUsername=document.getElementById('inpUsername');
+const inpPassword=document.getElementById('inpPassword');
+const inpRole=document.getElementById('inpRole');
+const extraStudentFields=document.getElementById('extraStudentFields');
+const inpYear=document.getElementById('inpYear');
+const inpBranch=document.getElementById('inpBranch');
+const inpContact=document.getElementById('inpContact');
+const inpInterests=document.getElementById('inpInterests');
+const authMessage=document.getElementById('authMessage');
+const hdrTitle=document.getElementById('hdrTitle');
+const currentUserBadge=document.getElementById('currentUserBadge');
+const btnLogout=document.getElementById('btnLogout');
+const leftPanel=document.getElementById('leftPanel');
+const eventsList=document.getElementById('eventsList');
+const companiesList=document.getElementById('companiesList');
+const applicationsList=document.getElementById('applicationsList');
+
+function read(key){ return JSON.parse(localStorage.getItem(key) || '[]'); }
+function write(key,val){ localStorage.setItem(key, JSON.stringify(val)); }
+function getUsers(){ return read(KEY_USERS); }
+function getEvents(){ return read(KEY_EVENTS); }
+function getCompanies(){ return read(KEY_COMPANIES); }
+function getApps(){ return read(KEY_APPS); }
+function getNotifs(){ return read(KEY_NOTIF); }
+function normalize(s){ return (s||'').toString().trim().toLowerCase(); }
+
+/* ======= INITIAL SAMPLE DATA (only if empty) ======= */
+if(getEvents().length===0 && getCompanies().length===0){
+  write(KEY_EVENTS, [
+    { id: 1, name: "Coding Workshop", date: "2025-11-01", venue: "Tech Hall A", organiser: "Rahul Sharma", contact: "9876543210", desc: "Learn Python & Automation", tags: ["coding","python","automation"] },
+    { id: 2, name: "Sports Meet", date: "2025-11-05", venue: "Main Ground", organiser: "Amit Kumar", contact: "9998887776", desc: "Inter-department competition", tags: ["sports","athletics"] }
+  ]);
+  write(KEY_COMPANIES, [
+    { id: 1, name: "Google", date: "2025-11-10", venue: "Auditorium", organiser: "Priya Mehta", contact: "9898989898", type: "Intern", tags: ["internship","coding","software"] },
+    { id: 2, name: "Infosys", date: "2025-11-12", venue: "Room 202", organiser: "Rohan Gupta", contact: "9765432100", type: "Fresher", tags: ["fresher","offcampus"] }
+  ]);
+}
+
+/* ======= FIREBASE SETUP ======= */
+/* Corrected storageBucket and using compat SDK */
+const firebaseConfig = {
+  apiKey: "AIzaSyAZCpbRJEnS34UgTHqC6V7kmsHkS0kXsg0",
+  authDomain: "eventiq-3f629.firebaseapp.com",
+  projectId: "eventiq-3f629",
+  storageBucket: "eventiq-3f629.appspot.com",
+  messagingSenderId: "396369620117",
+  appId: "1:396369620117:web:0417f9ccc2133d6eb7ff9c",
+  measurementId: "G-XDVBZT7XXR"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ======= Firestore helpers ======= */
+/* decide doc id for stable mapping between local and remote */
+function docIdFor(collectionName, item){
+  try{
+    if(collectionName === 'users') return String(item.username || item.id || item.email || Date.now());
+    if(collectionName === 'events') return String(item.id || Date.now());
+    if(collectionName === 'companies') return String(item.id || Date.now());
+    if(collectionName === 'applications') return String(item.when || item.id || Date.now());
+    if(collectionName === 'notifications') return String((item.when||Date.now()) + '-' + (item.username || 'u'));
+    return String(item.id || Date.now());
+  } catch(e){
+    return String(Date.now() + Math.random().toString(36).slice(2,7));
+  }
+}
+
+/* load remote -> local. If remote empty and local has data -> push local -> remote */
+async function loadCollectionToLocal(collectionName, localKey){
+  try {
+    const snapshot = await db.collection(collectionName).get();
+    if(snapshot.empty){
+      // remote empty: if local has data, push local to remote (create collection)
+      const localData = read(localKey);
+      if(Array.isArray(localData) && localData.length > 0){
+        await saveCollectionFromLocal(collectionName, localKey);
+      }
+      return;
+    }
+    const arr = [];
+    snapshot.forEach(doc => arr.push(doc.data()));
+    write(localKey, arr);
+  } catch (e) {
+    console.warn('Firestore load error', collectionName, e);
+  }
+}
+
+/* save local -> remote: set each doc by its id and remove remote docs not in local */
+async function saveCollectionFromLocal(collectionName, localKey){
+  try {
+    const items = read(localKey);
+    const existing = await db.collection(collectionName).get();
+    const batch = db.batch();
+
+    // create a set of ids we will keep
+    const idsToKeep = new Set(items.map(i => docIdFor(collectionName, i)));
+
+    // delete remote docs not in local
+    existing.forEach(d => {
+      if(!idsToKeep.has(String(d.id))){
+        batch.delete(d.ref);
+      }
+    });
+
+    // set/update docs from local
+    items.forEach(item => {
+      const id = docIdFor(collectionName, item);
+      const ref = db.collection(collectionName).doc(String(id));
+      const payload = Object.assign({}, item, { id: item.id || (item.when || undefined) });
+      batch.set(ref, payload);
+    });
+
+    await batch.commit();
+  } catch (e) {
+    console.warn('Firestore save error', collectionName, e);
+  }
+}
+
+/* realtime listener to keep local storage in sync when remote changes */
+function watchCollectionToLocal(collectionName, localKey){
+  try {
+    db.collection(collectionName).onSnapshot(snapshot => {
+      if(snapshot.empty) return; // don't wipe local if remote empty
+      const arr = [];
+      snapshot.forEach(doc => arr.push(doc.data()));
+      write(localKey, arr);
+      try{ renderLists(); }catch(e){}
+    });
+  } catch(e){
+    console.warn('watch error', collectionName, e);
+  }
+}
+
+/* ======= SYNC ON START ======= */
+async function initialSyncFromFirestore(){
+  try {
+    await Promise.all([
+      loadCollectionToLocal('events', KEY_EVENTS),
+      loadCollectionToLocal('companies', KEY_COMPANIES),
+      loadCollectionToLocal('applications', KEY_APPS),
+      loadCollectionToLocal('notifications', KEY_NOTIF),
+      loadCollectionToLocal('users', KEY_USERS)
+    ]);
+    // start realtime listeners
+    watchCollectionToLocal('events', KEY_EVENTS);
+    watchCollectionToLocal('companies', KEY_COMPANIES);
+    watchCollectionToLocal('applications', KEY_APPS);
+    watchCollectionToLocal('notifications', KEY_NOTIF);
+    watchCollectionToLocal('users', KEY_USERS);
+    try{ renderLists(); } catch(e){}
+  } catch (e) {
+    console.warn('initial sync error', e);
+  }
+}
+initialSyncFromFirestore();
+
+/* ======= AUTH (REGISTER / LOGIN) ======= */
+let isRegister = false;
+function setAuthMode(reg){
+  isRegister = !!reg;
+  modeTitle.textContent = isRegister ? 'Register' : 'Login';
+  btnAuth.textContent = isRegister ? 'Register' : 'Login';
+  authMessage.textContent = '';
+  toggleAuth.textContent = isRegister ? 'Back to Login' : 'Register';
+  inpName.style.display = isRegister ? 'block' : 'none';
+  extraStudentFields.style.display = (isRegister && inpRole.value === 'student') ? 'block' : 'none';
+}
+toggleAuth.addEventListener('click', ()=> setAuthMode(!isRegister));
+inpRole.addEventListener('change', ()=> {
+  extraStudentFields.style.display = (isRegister && inpRole.value === 'student') ? 'block' : 'none';
+});
+
+btnAuth.addEventListener('click', async ()=> {
+  const username = normalize(inpUsername.value);
+  const password = inpPassword.value;
+  const role = inpRole.value;
+  if(!username || !password){ authMessage.textContent = 'Fill username & password'; return; }
+
+  let users = getUsers();
+  if(isRegister){
+    const name = inpName.value.trim();
+    if(role === 'student' && !name){ authMessage.textContent = 'Students must enter full name'; return; }
+    if(users.some(u=>u.username === username)){ authMessage.textContent = 'User already exists'; return; }
+
+    const year = inpYear.value.trim();
+    const branch = inpBranch.value.trim();
+    const contact = inpContact.value.trim();
+    const interests = (role === 'student') ? inpInterests.value.split(',').map(x=>normalize(x)).filter(Boolean) : [];
+
+    users.push({ username, password, role, name: name || '', year, branch, contact, interests });
+    write(KEY_USERS, users);
+
+    // persist users
+    try { await saveCollectionFromLocal('users', KEY_USERS); } catch(e){ console.warn('save users', e); }
+
+    authMessage.textContent = 'Registered ✅ — Please login';
+    setAuthMode(false);
+    inpPassword.value=''; inpName.value=''; inpInterests.value=''; inpYear.value=''; inpBranch.value=''; inpContact.value='';
+  } else {
+    const found = users.find(u => u.username === username && u.password === password && u.role === role);
+    if(!found){ authMessage.textContent = 'Invalid username/password/role'; return; }
+    localStorage.setItem(KEY_CURRENT, JSON.stringify(found));
+    showAppFor(found);
+  }
+});
+
+/* ======= LOGOUT ======= */
+btnLogout.addEventListener('click', ()=> {
+  localStorage.removeItem(KEY_CURRENT);
+  authScreen.style.display = 'block';
+  appScreen.style.display = 'none';
+  inpUsername.value = ''; inpPassword.value = ''; authMessage.textContent = '';
+  setAuthMode(false);
+});
+
+/* ======= SHOW DASHBOARD ======= */
+function showAppFor(user){
+  authScreen.style.display = 'none';
+  appScreen.style.display = 'block';
+  hdrTitle.textContent = `${user.role.toUpperCase()} Dashboard`;
+  currentUserBadge.textContent = user.username;
+  renderLeftFor(user);
+  renderLists();
+}
+
+/* ======= LEFT PANEL RENDER ======= */
+function renderLeftFor(user){
+  leftPanel.innerHTML = '';
+  if(user.role === 'admin'){
+    leftPanel.innerHTML = `
+      <div style="margin-bottom:12px">
+        <div class="section-title">Add Event</div>
+        <input id="e_name" placeholder="Event name" />
+        <input id="e_date" placeholder="Date (YYYY-MM-DD)" />
+        <input id="e_venue" placeholder="Venue" />
+        <input id="e_org" placeholder="Organiser" />
+        <input id="e_contact" placeholder="Contact" />
+        <textarea id="e_desc" placeholder="Short description"></textarea>
+        <input id="e_tags" placeholder="Tags (comma-separated) — e.g. coding,ai" />
+        <button id="btnAddEvent">Add Event</button>
+      </div>
+      <div style="margin-top:14px">
+        <div class="section-title">Add Company</div>
+        <input id="c_name" placeholder="Company name" />
+        <input id="c_date" placeholder="Date (YYYY-MM-DD)" />
+        <input id="c_venue" placeholder="Venue" />
+        <input id="c_org" placeholder="HR / organiser" />
+        <input id="c_contact" placeholder="Contact" />
+        <input id="c_type" placeholder="Type (Intern/Fresher)" />
+        <input id="c_tags" placeholder="Tags (comma-separated) — e.g. internship,software" />
+        <button id="btnAddCompany">Add Company</button>
+      </div>
+      <div style="margin-top:14px">
+        <div class="section-title">Quick</div>
+        <div><span class="small-link" id="btnClearNotifs">Clear all notifications</span></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="section-title">Users (username & password)</div>
+        <div id="adminUsersList" class="list"></div>
+      </div>
+    `;
+    document.getElementById('btnAddEvent').onclick = addEventFromAdmin;
+    document.getElementById('btnAddCompany').onclick = addCompanyFromAdmin;
+    document.getElementById('btnClearNotifs').onclick = ()=>{ write(KEY_NOTIF, []); alert('Notifications cleared'); renderLists(); saveCollectionFromLocal('notifications', KEY_NOTIF); };
+    renderAdminUsers();
+  } else {
+    leftPanel.innerHTML = `
+      <div>
+        <div class="section-title">Notifications</div>
+        <div id="notificationsBox" class="list"></div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="section-title">Recommended For You</div>
+        <div id="recommendBox" class="list"></div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="section-title">Your Applications</div>
+        <div id="myApps" class="list"></div>
+      </div>
+    `;
+    renderNotifications(user.username);
+    renderRecommendations(user.username);
+    renderMyApplications(user.username);
+  }
+}
+
+/* ======= ADMIN: Users list (show username & password only) ======= */
+function renderAdminUsers(){
+  const box = document.getElementById('adminUsersList');
+  if(!box) return;
+  const users = getUsers();
+  if(users.length === 0) { box.innerHTML = '<div class="item">No users</div>'; return; }
+  box.innerHTML = users.map(u => `<div class="item"><div><div style="font-weight:700">${u.username}</div><div class="muted">Password: ${u.password || ''} • Role: ${u.role}</div></div><div class="row-buttons"><button class="delete" onclick="deleteUser('${u.username}')">Delete</button></div></div>`).join('');
+}
+
+/* ======= ADMIN: Add Event / Company (and notify students) ======= */
+function parseTagsFromInputLocal(input){
+  return (input||'').split(',').map(t=>normalize(t)).filter(Boolean);
+}
+async function addEventFromAdmin(){
+  const name = document.getElementById('e_name').value.trim();
+  const date = document.getElementById('e_date').value.trim();
+  if(!name||!date){ alert('Fill at least name & date'); return; }
+  const events = getEvents();
+  const obj = {
+    id: Date.now(),
+    name,
+    date,
+    venue: document.getElementById('e_venue').value.trim(),
+    organiser: document.getElementById('e_org').value.trim(),
+    contact: document.getElementById('e_contact').value.trim(),
+    desc: document.getElementById('e_desc').value.trim(),
+    tags: parseTagsFromInputLocal(document.getElementById('e_tags').value)
+  };
+  events.push(obj);
+  write(KEY_EVENTS, events);
+  try { await saveCollectionFromLocal('events', KEY_EVENTS); } catch(e){ console.warn('save events', e); }
+  notifyStudentsForNew(obj, 'event');
+  ['e_name','e_date','e_venue','e_org','e_contact','e_desc','e_tags'].forEach(id=>document.getElementById(id).value='');
+  renderLists();
+  alert('Event added ✅');
+}
+
+async function addCompanyFromAdmin(){
+  const name = document.getElementById('c_name').value.trim();
+  const date = document.getElementById('c_date').value.trim();
+  if(!name||!date){ alert('Fill at least name & date'); return; }
+  const companies = getCompanies();
+  const obj = {
+    id: Date.now(),
+    name,
+    date,
+    venue: document.getElementById('c_venue').value.trim(),
+    organiser: document.getElementById('c_org').value.trim(),
+    contact: document.getElementById('c_contact').value.trim(),
+    type: document.getElementById('c_type').value.trim(),
+    tags: parseTagsFromInputLocal(document.getElementById('c_tags').value)
+  };
+  companies.push(obj);
+  write(KEY_COMPANIES, companies);
+  try { await saveCollectionFromLocal('companies', KEY_COMPANIES); } catch(e){ console.warn('save companies', e); }
+  notifyStudentsForNew(obj, 'company');
+  ['c_name','c_date','c_venue','c_org','c_contact','c_type','c_tags'].forEach(id=>document.getElementById(id).value='');
+  renderLists();
+  alert('Company added ✅');
+}
+
+/* ======= NOTIFY STUDENTS WHEN NEW ITEM ADDED ======= */
+function notifyStudentsForNew(item, kind){
+  const users = getUsers().filter(u => u.role === 'student' && Array.isArray(u.interests) && u.interests.length);
+  const notifs = getNotifs();
+  users.forEach(u => {
+    const matches = u.interests.some(int => {
+      if(item.tags && item.tags.includes(int)) return true;
+      if(item.name && normalize(item.name).includes(int)) return true;
+      if(item.desc && normalize(item.desc).includes(int)) return true;
+      if(item.type && normalize(item.type).includes(int)) return true;
+      return false;
+    });
+    if(matches){
+      notifs.push({ username: u.username, kind, name: item.name, when: Date.now(), read: false });
+    }
+  });
+  write(KEY_NOTIF, notifs);
+  // persist notifications to firestore
+  saveCollectionFromLocal('notifications', KEY_NOTIF).catch(e => console.warn('notif save', e));
+}
+
+/* ======= RENDER EVENTS / COMPANIES / APPS ======= */
+function renderLists(){
+  const events = getEvents();
+  const companies = getCompanies();
+  const apps = getApps();
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+
+  // EVENTS
+  if(events.length === 0) eventsList.innerHTML = '<div class="item">No events yet.</div>';
+  else eventsList.innerHTML = events.map(ev => {
+    const evTags = (ev.tags||[]).map(t=>`<span class="chip">${t}</span>`).join('');
+    const recommendFlag = isRecommendedForCurrent(ev, cur) ? '<div class="chip" style="background:#e6f7ff;color:#026aa7">Recommended</div>' : '';
+    const applyButton = cur && cur.role === 'student' ? renderApplyButton('event', ev.id) : '';
+    const adminButtons = cur && cur.role === 'admin' ? `<div class="row-buttons"><button onclick="editEvent(${ev.id})">Edit</button><button class="delete" onclick="deleteEvent(${ev.id})">Delete</button></div>` : '';
+    return `<div class="item" id="ev-${ev.id}">
+      <div>
+        <div style="font-weight:700;color:#073b6b">${ev.name} ${recommendFlag}</div>
+        <div class="muted">${ev.date} • ${ev.venue || 'Venue N/A'}</div>
+        <div style="margin-top:6px">${ev.desc || ''}</div>
+        <div style="margin-top:6px" class="muted">Organiser: ${ev.organiser || 'N/A'} • ${ev.contact || 'N/A'}</div>
+        <div class="chips">${evTags}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+        ${applyButton}
+        ${adminButtons}
+      </div>
+    </div>`;
+  }).join('');
+
+  // COMPANIES
+  if(companies.length === 0) companiesList.innerHTML = '<div class="item">No companies yet.</div>';
+  else companiesList.innerHTML = companies.map(cp => {
+    const cpTags = (cp.tags||[]).map(t=>`<span class="chip">${t}</span>`).join('');
+    const recommendFlag = isRecommendedForCurrent(cp, cur) ? '<div class="chip" style="background:#e6f7ff;color:#026aa7">Recommended</div>' : '';
+    const applyButton = cur && cur.role === 'student' ? renderApplyButton('company', cp.id) : '';
+    const adminButtons = cur && cur.role === 'admin' ? `<div class="row-buttons"><button onclick="editCompany(${cp.id})">Edit</button><button class="delete" onclick="deleteCompany(${cp.id})">Delete</button></div>` : '';
+    return `<div class="item" id="cp-${cp.id}">
+      <div>
+        <div style="font-weight:700;color:#073b6b">${cp.name} <span style="font-weight:600;color:#0a4e8a">(${cp.type||'Hiring'})</span> ${recommendFlag}</div>
+        <div class="muted">${cp.date} • ${cp.venue || 'Venue N/A'}</div>
+        <div style="margin-top:6px" class="muted">HR: ${cp.organiser || 'N/A'} • ${cp.contact || 'N/A'}</div>
+        <div class="chips">${cpTags}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+        ${applyButton}
+        ${adminButtons}
+      </div>
+    </div>`;
+  }).join('');
+
+  // APPLICATIONS rendering — FIXED: admin sees all; student sees only their own (and can delete only own)
+  const applications = getApps();
+  const curUser = cur;
+  if(!curUser){
+    applicationsList.innerHTML = '<div class="item">Login to view applications</div>';
+  } else {
+    if(curUser.role === 'admin'){
+      // Admin: show all applications with admin delete
+      applicationsList.innerHTML = applications.length ? applications.map(a => {
+        const userInfo = a.userDetails ? `<div class="muted">Name: ${a.userDetails.name || ''} • Username: ${a.username} • Year: ${a.userDetails.year || ''} • Branch: ${a.userDetails.branch || ''} • Contact: ${a.userDetails.contact || ''}</div>` : `<div class="muted">Username: ${a.username}</div>`;
+        return `<div class="item"><div><span class="meta">${a.username}</span><div class="muted">applied for ${a.kind} — ${a.name}</div>${userInfo}</div><div><small class="muted">${new Date(a.when).toLocaleString()}</small><div style="margin-top:8px"><button onclick="deleteApplication(${a.when})" class="delete">Delete Application</button></div></div></div>`;
+      }).join('') : '<div class="item">No applications yet.</div>';
+    } else {
+      // Student: show only applications for current student; allow delete only on their own entries
+      const myApps = applications.filter(a => a.username === curUser.username);
+      applicationsList.innerHTML = myApps.length ? myApps.map(a => {
+        const userInfo = a.userDetails ? `<div class="muted">Name: ${a.userDetails.name || ''} • Username: ${a.username} • Year: ${a.userDetails.year || ''} • Branch: ${a.userDetails.branch || ''} • Contact: ${a.userDetails.contact || ''}</div>` : `<div class="muted">Username: ${a.username}</div>`;
+        // student delete should call deleteMyApplication (keeps same checks)
+        return `<div class="item"><div><span class="meta">${a.username}</span><div class="muted">applied for ${a.kind} — ${a.name}</div>${userInfo}</div><div><small class="muted">${new Date(a.when).toLocaleString()}</small><div style="margin-top:8px"><button onclick="deleteMyApplication(${a.when})" class="delete">Delete Application</button></div></div></div>`;
+      }).join('') : '<div class="item">No applications yet.</div>';
+    }
+  }
+
+  // student-specific boxes refresh
+  const curStored = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(curStored && curStored.role === 'student'){
+    renderNotifications(curStored.username);
+    renderRecommendations(curStored.username);
+    renderMyApplications(curStored.username);
+  }
+}
+
+/* ======= APPLY ======= */
+function renderApplyButton(kind,id){
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(!cur || cur.role !== 'student') return '';
+  const apps = getApps();
+  const already = apps.some(a=> a.username === cur.username && a.kind === kind && a.itemId === id);
+  return already ? `<button disabled style="opacity:0.6">Applied</button>` : `<button onclick="applyNow('${kind}',${id})">Apply</button>`;
+}
+async function applyNow(kind,id){
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(!cur || cur.role !== 'student'){ alert('Please login as student to apply'); return; }
+  const item = (kind==='event' ? getEvents().find(x=>x.id===id) : getCompanies().find(x=>x.id===id));
+  if(!item){ alert('Item not found'); return; }
+  const apps = getApps();
+
+  const users = getUsers();
+  const userObj = users.find(u => u.username === cur.username) || {};
+  const appObj = { username: cur.username, kind, itemId: id, name: item.name, when: Date.now(), userDetails: { name: userObj.name || '', year: userObj.year || '', branch: userObj.branch || '', contact: userObj.contact || '', interests: userObj.interests || [] } };
+  apps.push(appObj);
+  write(KEY_APPS, apps);
+  try { await saveCollectionFromLocal('applications', KEY_APPS); } catch(e){ console.warn('save apps', e); }
+  alert('Applied successfully ✅');
+  renderLists();
+}
+
+/* ======= RECOMMENDATION LOGIC ======= */
+function isRecommendedForCurrent(item, cur){
+  if(!cur || cur.role !== 'student' || !Array.isArray(cur.interests)) return false;
+  const interests = cur.interests.map(normalize);
+  if(item.tags && item.tags.some(t => interests.includes(t))) return true;
+  if(item.name && interests.some(i => normalize(item.name).includes(i))) return true;
+  if(item.desc && interests.some(i => normalize(item.desc).includes(i))) return true;
+  if(item.type && interests.some(i => normalize(item.type).includes(i))) return true;
+  return false;
+}
+function getRecommendationsFor(username){
+  const users = getUsers();
+  const user = users.find(u=>u.username === username);
+  if(!user || !Array.isArray(user.interests) || user.interests.length === 0) return { events: [], companies: [] };
+  const events = getEvents().filter(ev => isRecommendedForCurrent(ev, user));
+  const companies = getCompanies().filter(cp => isRecommendedForCurrent(cp, user));
+  return { events, companies };
+}
+
+/* ======= NOTIFICATIONS: render and mark read ======= */
+function renderNotifications(username){
+  const notifs = getNotifs().filter(n => n.username === username).sort((a,b)=>b.when - a.when);
+  const box = document.getElementById('notificationsBox');
+  if(!box) return;
+  if(notifs.length === 0){ box.innerHTML = '<div class="item">No notifications</div>'; return; }
+  box.innerHTML = notifs.map(n => {
+    const cls = n.read ? '' : 'notif-unread';
+    return `<div class="item ${cls}">
+      <div>
+        <div style="font-weight:700">${n.kind}: ${n.name}</div>
+        <div class="muted">${new Date(n.when).toLocaleString()}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${n.read ? '<span class="small muted">Read</span>' : `<button onclick="markNotifRead(${n.when})">Mark read</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function markNotifRead(when){
+  const notifs = getNotifs().map(n => (n.when === when ? {...n, read:true} : n));
+  write(KEY_NOTIF, notifs);
+  try { await saveCollectionFromLocal('notifications', KEY_NOTIF); } catch(e){ console.warn('save notif', e); }
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(cur) renderNotifications(cur.username);
+}
+
+/* ======= RENDER RECOMMENDATIONS & MY APPS ======= */
+function renderRecommendations(username){
+  const recBox = document.getElementById('recommendBox');
+  if(!recBox) return;
+  const recs = getRecommendationsFor(username);
+  if(recs.events.length === 0 && recs.companies.length === 0){ recBox.innerHTML = '<div class="item">No recommendations yet</div>'; return; }
+  recBox.innerHTML = [...recs.events.map(e=>`<div class="item"><div><b>${e.name}</b><div class="muted">Event • ${e.date}</div></div><div><button onclick="openAndHighlight('event',${e.id})">View</button></div></div>`), ...recs.companies.map(c=>`<div class="item"><div><b>${c.name}</b><div class="muted">${c.type || 'Company'}</div></div><div><button onclick="openAndHighlight('company',${c.id})">View</button></div></div>` )].join('');
+}
+function renderMyApplications(username){
+  const box = document.getElementById('myApps');
+  if(!box) return;
+  const apps = getApps().filter(a => a.username === username);
+  if(apps.length === 0){ box.innerHTML = '<div class="item">No applications</div>'; return; }
+  // student can delete only their own applications; show delete button per item
+  box.innerHTML = apps.map(a => `<div class="item"><div>${a.name}<div class="muted">${a.kind} • ${new Date(a.when).toLocaleString()}</div></div><div><div style="margin-top:8px"><button onclick="deleteMyApplication(${a.when})" class="delete">Delete</button></div></div></div>`).join('');
+}
+
+/* ======= UTIL: open and highlight item in lists ======= */
+function openAndHighlight(kind,id){
+  const el = document.getElementById((kind==='event'?'ev-':'cp-') + id);
+  if(!el) return;
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.style.transition = 'box-shadow 0.3s';
+  el.style.boxShadow = '0 0 0 4px rgba(30,136,229,0.12)';
+  setTimeout(()=> el.style.boxShadow = '', 2000);
+}
+
+/* ======= ADMIN EDIT / DELETE ======= */
+async function editEvent(id){
+  const events = getEvents();
+  const i = events.findIndex(x=>x.id===id); if(i<0) return;
+  const ev = events[i];
+  const newName = prompt('Event name', ev.name); if(newName !== null) ev.name = newName.trim();
+  const newDate = prompt('Date (YYYY-MM-DD)', ev.date); if(newDate !== null) ev.date = newDate.trim();
+  const newVenue = prompt('Venue', ev.venue); if(newVenue !== null) ev.venue = newVenue.trim();
+  const newDesc = prompt('Description', ev.desc); if(newDesc !== null) ev.desc = newDesc.trim();
+  const newTags = prompt('Tags (comma-separated)', (ev.tags||[]).join(',')); if(newTags !== null) ev.tags = parseTagsFromInputLocal(newTags);
+  events[i] = ev;
+  write(KEY_EVENTS, events);
+  try { await saveCollectionFromLocal('events', KEY_EVENTS); } catch(e){ console.warn('save events', e); }
+  renderLists();
+}
+async function deleteEvent(id){
+  if(!confirm('Delete this event?')) return;
+  const events = getEvents().filter(x=>x.id !== id);
+  write(KEY_EVENTS, events);
+  try { await saveCollectionFromLocal('events', KEY_EVENTS); } catch(e){ console.warn('save events', e); }
+  renderLists();
+}
+async function editCompany(id){
+  const companies = getCompanies();
+  const i = companies.findIndex(x=>x.id===id); if(i<0) return;
+  const cp = companies[i];
+  const newName = prompt('Company name', cp.name); if(newName !== null) cp.name = newName.trim();
+  const newDate = prompt('Date (YYYY-MM-DD)', cp.date); if(newDate !== null) cp.date = newDate.trim();
+  const newVenue = prompt('Venue', cp.venue); if(newVenue !== null) cp.venue = newVenue.trim();
+  const newType = prompt('Type (Intern/Fresher)', cp.type); if(newType !== null) cp.type = newType.trim();
+  const newTags = prompt('Tags (comma-separated)', (cp.tags||[]).join(',')); if(newTags !== null) cp.tags = parseTagsFromInputLocal(newTags);
+  companies[i] = cp;
+  write(KEY_COMPANIES, companies);
+  try { await saveCollectionFromLocal('companies', KEY_COMPANIES); } catch(e){ console.warn('save companies', e); }
+  renderLists();
+}
+async function deleteCompany(id){
+  if(!confirm('Delete this company?')) return;
+  const companies = getCompanies().filter(x=>x.id !== id);
+  write(KEY_COMPANIES, companies);
+  try { await saveCollectionFromLocal('companies', KEY_COMPANIES); } catch(e){ console.warn('save companies', e); }
+  renderLists();
+}
+
+/* ======= Delete application (admin) ======= */
+async function deleteApplication(when){
+  if(!confirm('Delete this application? This will only remove the application record.')) return;
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  // admin can delete any; students cannot access this admin button normally
+  if(!cur || cur.role !== 'admin'){ alert('Only admin can delete other applications from this view'); return; }
+  const apps = getApps().filter(a => a.when !== when);
+  write(KEY_APPS, apps);
+  try { await saveCollectionFromLocal('applications', KEY_APPS); } catch(e){ console.warn('save apps', e); }
+  renderLists();
+}
+
+/* ======= Student: delete own application ======= */
+async function deleteMyApplication(when){
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(!cur || cur.role !== 'student'){ alert('Please login as student'); return; }
+  const apps = getApps();
+  const idx = apps.findIndex(a => a.when === when && a.username === cur.username);
+  if(idx === -1){ alert('Application not found or you are not authorized to delete it'); return; }
+  if(!confirm('Delete your application?')) return;
+  apps.splice(idx,1);
+  write(KEY_APPS, apps);
+  try { await saveCollectionFromLocal('applications', KEY_APPS); } catch(e){ console.warn('save apps', e); }
+  renderLists();
+}
+
+/* ======= NEW: Delete user (admin) ======= */
+async function deleteUser(username){
+  if(!confirm('Delete this user? This will remove the user from the system.')) return;
+  const users = getUsers().filter(u => u.username !== username);
+  write(KEY_USERS, users);
+  try { await saveCollectionFromLocal('users', KEY_USERS); } catch(e){ console.warn('save users', e); }
+  try{ renderAdminUsers(); } catch(e){}
+  try{ renderLists(); } catch(e){}
+  alert('User deleted ✅');
+}
+
+/* ======= AUTORESTORE SESSION ======= */
+window.addEventListener('DOMContentLoaded', ()=> {
+  const cur = JSON.parse(localStorage.getItem(KEY_CURRENT) || 'null');
+  if(cur){ showAppFor(cur); } else { setAuthMode(false); }
+});
+
+/* ======= small wrappers ======= */
+function parseTagsFromInput(input){
+  return (input||'').split(',').map(x=>normalize(x)).filter(Boolean);
+}
+
+/* ======= Make sure lists stay updated after actions ======= */
+// intercept localStorage.setItem to trigger renders in UI
+const originalSetItem = localStorage.setItem;
+localStorage.setItem = function(k,v){
+  originalSetItem.apply(this, arguments);
+  if([KEY_EVENTS, KEY_COMPANIES, KEY_APPS, KEY_NOTIF, KEY_USERS, KEY_CURRENT].includes(k)){
+    setTimeout(()=>{ try{ renderLists(); }catch(e){} }, 50);
+  }
+};
+
+</script>
+</body>
+</html>
